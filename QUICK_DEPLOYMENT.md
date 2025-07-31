@@ -11,7 +11,7 @@ GitHub: https://github.com/Lawrence-Wambugu/JB-Rice
 - **URL:** https://render.com
 - **Repository:** `Lawrence-Wambugu/JB-Rice`
 - **Name:** `jb-rice-pro-backend`
-- **Environment:** `Python 3`
+- **Environment:** `Python 3.11`
 - **Build Command:** `pip install -r requirements.txt`
 - **Start Command:** `gunicorn app:app`
 
