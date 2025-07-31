@@ -255,6 +255,12 @@ def reset_password():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+# Root route for testing
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint"""
+    return jsonify({'message': 'JB-Rice-Pro API is running', 'endpoints': '/api/*'}), 200
+
 # Health check route
 @app.route('/api/health', methods=['GET'])
 def health_check():
