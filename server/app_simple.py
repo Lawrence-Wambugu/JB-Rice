@@ -259,13 +259,41 @@ def reset_password():
 @app.route('/', methods=['GET'])
 def root():
     """Root endpoint"""
-    return jsonify({'message': 'JB-Rice-Pro API is running', 'endpoints': '/api/*'}), 200
+    # Auto-initialize database if tables don't exist
+    try:
+        with app.app_context():
+            db.create_all()
+        return jsonify({
+            'message': 'JB-Rice-Pro API is running', 
+            'endpoints': '/api/*',
+            'database': 'initialized'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'message': 'JB-Rice-Pro API is running', 
+            'endpoints': '/api/*',
+            'database': f'error: {str(e)}'
+        }), 200
 
 # Health check route
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({'status': 'healthy', 'message': 'JB-Rice-Pro API is running'}), 200
+    try:
+        # Ensure database is initialized
+        with app.app_context():
+            db.create_all()
+        return jsonify({
+            'status': 'healthy', 
+            'message': 'JB-Rice-Pro API is running',
+            'database': 'initialized'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'warning', 
+            'message': 'JB-Rice-Pro API is running',
+            'database': f'error: {str(e)}'
+        }), 200
 
 # Routes
 @app.route('/api/inventory', methods=['GET'])
@@ -730,7 +758,13 @@ def get_inventory_report():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-if __name__ == '__main__':
-    with app.app_context():
+# Initialize database on startup
+with app.app_context():
+    try:
         db.create_all()
+        print("✅ Database tables created successfully")
+    except Exception as e:
+        print(f"⚠️ Database initialization error: {e}")
+
+if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000) 
