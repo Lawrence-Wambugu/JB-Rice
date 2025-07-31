@@ -107,15 +107,21 @@ def hash_password(password):
 def verify_password(password, hashed):
     return hashed == f"hashed_{password}"
 
-# Session management for user isolation
-current_user_id = None
-
+# Session management for user isolation using request headers
 def get_current_user_id():
-    return current_user_id
+    """Get user ID from request headers"""
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        user_id = auth_header.split(' ')[1]
+        try:
+            return int(user_id)
+        except ValueError:
+            return None
+    return None
 
 def set_current_user_id(user_id):
-    global current_user_id
-    current_user_id = user_id
+    """This is handled by the frontend now"""
+    pass
 
 # Authentication routes
 @app.route('/api/auth/signup', methods=['POST'])
@@ -184,16 +190,14 @@ def signin():
         if not user or not verify_password(password, user.password_hash):
             return jsonify({'error': 'Invalid credentials'}), 401
         
-        # Set current user for session
-        set_current_user_id(user.id)
-        
         return jsonify({
             'message': 'Login successful',
             'user': {
                 'id': user.id,
                 'username': user.username,
                 'email': user.email
-            }
+            },
+            'token': str(user.id)  # Simple token for demo
         }), 200
         
     except Exception as e:
@@ -285,14 +289,25 @@ def root():
         return jsonify({
             'message': 'JB-Rice-Pro API is running', 
             'endpoints': '/api/*',
-            'database': 'initialized'
+            'database': 'initialized',
+            'timestamp': get_eat_time().isoformat()
         }), 200
     except Exception as e:
         return jsonify({
             'message': 'JB-Rice-Pro API is running', 
             'endpoints': '/api/*',
-            'database': f'error: {str(e)}'
+            'database': f'error: {str(e)}',
+            'timestamp': get_eat_time().isoformat()
         }), 200
+
+# Keep-alive endpoint to prevent service sleeping
+@app.route('/api/ping', methods=['GET'])
+def ping():
+    """Keep-alive endpoint"""
+    return jsonify({
+        'status': 'alive',
+        'timestamp': get_eat_time().isoformat()
+    }), 200
 
 # Health check route
 @app.route('/api/health', methods=['GET'])
@@ -815,6 +830,19 @@ with app.app_context():
     try:
         db.create_all()
         print("✅ Database tables created successfully")
+        
+        # Create a default admin user if no users exist
+        if User.query.count() == 0:
+            admin_user = User(
+                username='admin',
+                email='admin@jb-rice-pro.com',
+                phone='123456789',
+                password_hash=hash_password('Admin123!')
+            )
+            db.session.add(admin_user)
+            db.session.commit()
+            print("✅ Default admin user created")
+            
     except Exception as e:
         print(f"⚠️ Database initialization error: {e}")
 

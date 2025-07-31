@@ -1,13 +1,23 @@
 import axios from 'axios';
+import { authService } from './auth';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+// Create authenticated API instance
+const createAuthenticatedAPI = () => {
+  const user = authService.getCurrentUser();
+  const token = user ? user.token : null;
+  
+  return axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': token ? `Bearer ${token}` : '',
+    },
+  });
+};
+
+const api = createAuthenticatedAPI();
 
 // Inventory API
 export const inventoryAPI = {

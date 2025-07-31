@@ -40,8 +40,12 @@ const SignIn = () => {
     try {
       const response = await authService.signin(formData);
       setSuccess('Login successful! Redirecting to dashboard...');
-      // Store user data using auth service
-      authService.setCurrentUser(response.data.user);
+      // Store user data with token
+      const userData = {
+        ...response.data.user,
+        token: response.data.token
+      };
+      authService.setCurrentUser(userData);
       setTimeout(() => {
         navigate('/dashboard');
       }, 1500);

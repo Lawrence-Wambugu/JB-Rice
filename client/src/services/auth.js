@@ -9,6 +9,20 @@ const authAPI = axios.create({
   },
 });
 
+// Create API instance with auth token
+const createAuthenticatedAPI = () => {
+  const user = authService.getCurrentUser();
+  const token = user ? user.token : null;
+  
+  return axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': token ? `Bearer ${token}` : '',
+    },
+  });
+};
+
 // Authentication API
 export const authService = {
   // Sign up
