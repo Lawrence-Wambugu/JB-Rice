@@ -18,7 +18,7 @@
 - [ ] Connect repository: `Lawrence-Wambugu/JB-Rice`
 - [ ] Configure settings:
   - [ ] Name: `jb-rice-pro-backend`
-  - [ ] Environment: `Python 3.11`
+  - [ ] Environment: `Python 3.10`
   - [ ] Build Command: `pip install -r requirements.txt`
   - [ ] Start Command: `gunicorn app:app`
   - [ ] Region: Choose closest location
