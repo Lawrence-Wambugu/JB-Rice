@@ -52,22 +52,27 @@ class User(db.Model):
 
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20))
     email = db.Column(db.String(100))
     customer_type = db.Column(db.String(20), nullable=False)  # 'restaurant' or 'individual'
     address = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=get_eat_time)
+    user = db.relationship('User', backref='customers')
 
 class Inventory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     bags_added = db.Column(db.Integer, nullable=False)
     total_kg = db.Column(db.Float, nullable=False)
     cost_per_bag = db.Column(db.Float, default=9000.0)  # KES 9,000 per 60kg bag
     date_added = db.Column(db.DateTime, default=get_eat_time)
+    user = db.relationship('User', backref='inventory_records')
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
     quantity_kg = db.Column(db.Float, nullable=False)
     price_per_kg = db.Column(db.Float, nullable=False)
@@ -75,6 +80,7 @@ class Order(db.Model):
     order_date = db.Column(db.DateTime, default=get_eat_time)
     delivery_status = db.Column(db.String(20), default='pending')  # pending, delivered, cancelled
     delivery_date = db.Column(db.DateTime)
+    user = db.relationship('User', backref='orders')
     customer = db.relationship('Customer', backref='orders')
 
 # Password validation function
@@ -100,6 +106,16 @@ def hash_password(password):
 
 def verify_password(password, hashed):
     return hashed == f"hashed_{password}"
+
+# Session management for user isolation
+current_user_id = None
+
+def get_current_user_id():
+    return current_user_id
+
+def set_current_user_id(user_id):
+    global current_user_id
+    current_user_id = user_id
 
 # Authentication routes
 @app.route('/api/auth/signup', methods=['POST'])
@@ -167,6 +183,9 @@ def signin():
         
         if not user or not verify_password(password, user.password_hash):
             return jsonify({'error': 'Invalid credentials'}), 401
+        
+        # Set current user for session
+        set_current_user_id(user.id)
         
         return jsonify({
             'message': 'Login successful',
@@ -300,12 +319,21 @@ def health_check():
 def get_inventory():
     """Get current inventory status"""
     try:
-        # Calculate current stock
-        total_bags_added = db.session.query(db.func.sum(Inventory.bags_added)).scalar() or 0
-        total_kg_added = db.session.query(db.func.sum(Inventory.total_kg)).scalar() or 0
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
         
-        # Calculate sold kg
+        # Calculate current stock for this user
+        total_bags_added = db.session.query(db.func.sum(Inventory.bags_added)).filter(
+            Inventory.user_id == user_id
+        ).scalar() or 0
+        total_kg_added = db.session.query(db.func.sum(Inventory.total_kg)).filter(
+            Inventory.user_id == user_id
+        ).scalar() or 0
+        
+        # Calculate sold kg for this user
         total_sold_kg = db.session.query(db.func.sum(Order.quantity_kg)).filter(
+            Order.user_id == user_id,
             Order.delivery_status == 'delivered'
         ).scalar() or 0
         
@@ -326,17 +354,27 @@ def get_inventory():
 def get_inventory_history():
     """Get inventory history with timestamps and filtering"""
     try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
         period = request.args.get('period', 'all')  # week, month, all
         end_date = get_eat_time()
         
         if period == 'week':
             start_date = end_date - timedelta(days=7)
-            query = Inventory.query.filter(Inventory.date_added >= start_date)
+            query = Inventory.query.filter(
+                Inventory.user_id == user_id,
+                Inventory.date_added >= start_date
+            )
         elif period == 'month':
             start_date = end_date - timedelta(days=30)
-            query = Inventory.query.filter(Inventory.date_added >= start_date)
+            query = Inventory.query.filter(
+                Inventory.user_id == user_id,
+                Inventory.date_added >= start_date
+            )
         else:  # all
-            query = Inventory.query
+            query = Inventory.query.filter(Inventory.user_id == user_id)
         
         inventory_records = query.order_by(Inventory.date_added.desc()).all()
         
@@ -355,6 +393,10 @@ def get_inventory_history():
 def add_inventory():
     """Add new rice bags to inventory"""
     try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
         data = request.get_json()
         bags = data.get('bags', 0)
         cost_per_bag = data.get('cost_per_bag', 9000.0)
@@ -365,6 +407,7 @@ def add_inventory():
         total_kg = bags * 60  # 60kg per bag
         
         new_inventory = Inventory(
+            user_id=user_id,
             bags_added=bags,
             total_kg=total_kg,
             cost_per_bag=cost_per_bag
@@ -418,8 +461,12 @@ def update_inventory(inventory_id):
 def get_customers():
     """Get all customers with optional filtering"""
     try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
         customer_type = request.args.get('type')
-        query = Customer.query
+        query = Customer.query.filter(Customer.user_id == user_id)
         
         if customer_type:
             query = query.filter_by(customer_type=customer_type)
@@ -441,6 +488,10 @@ def get_customers():
 def add_customer():
     """Add new customer"""
     try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
         data = request.get_json()
         name = data.get('name', '').strip()
         phone = data.get('phone', '').strip()
@@ -455,6 +506,7 @@ def add_customer():
             return jsonify({'error': 'Customer type must be restaurant or individual'}), 400
         
         new_customer = Customer(
+            user_id=user_id,
             name=name,
             phone=phone,
             email=email,
