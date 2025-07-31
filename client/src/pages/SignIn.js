@@ -40,8 +40,8 @@ const SignIn = () => {
     try {
       const response = await authService.signin(formData);
       setSuccess('Login successful! Redirecting to dashboard...');
-      // Store user data in localStorage (in a real app, use proper state management)
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+      // Store user data using auth service
+      authService.setCurrentUser(response.data.user);
       setTimeout(() => {
         navigate('/dashboard');
       }, 1500);

@@ -12,6 +12,7 @@ import {
   Wheat,
   LogOut
 } from 'lucide-react';
+import { authService } from '../services/auth';
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -28,7 +29,7 @@ const Layout = ({ children }) => {
   ];
 
   const handleLogout = () => {
-    localStorage.removeItem('user');
+    authService.logout();
     navigate('/signin');
   };
 

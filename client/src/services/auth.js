@@ -25,6 +25,27 @@ export const authService = {
   
   // Reset password
   resetPassword: (resetData) => authAPI.post('/auth/reset-password', resetData),
+
+  // Get current user from localStorage
+  getCurrentUser: () => {
+    const user = localStorage.getItem('user');
+    return user ? JSON.parse(user) : null;
+  },
+
+  // Set current user in localStorage
+  setCurrentUser: (user) => {
+    localStorage.setItem('user', JSON.stringify(user));
+  },
+
+  // Remove current user from localStorage
+  logout: () => {
+    localStorage.removeItem('user');
+  },
+
+  // Check if user is authenticated
+  isAuthenticated: () => {
+    return localStorage.getItem('user') !== null;
+  }
 };
 
 export default authService; 
