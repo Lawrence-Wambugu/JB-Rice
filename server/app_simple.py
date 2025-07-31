@@ -21,12 +21,15 @@ app = Flask(__name__)
 
 # Database configuration - use SQLite by default, PostgreSQL in production
 database_url = os.getenv('DATABASE_URL')
-if database_url and database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql://', 1)
 
-# Use SQLite if no DATABASE_URL is provided (for development)
-if not database_url:
-    database_url = 'sqlite:///mwearicepro.db'
+# For now, always use SQLite to avoid psycopg2 issues
+database_url = 'sqlite:///mwearicepro.db'
+
+# If you want to use PostgreSQL later, uncomment these lines:
+# if database_url and database_url.startswith('postgres://'):
+#     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+# elif not database_url:
+#     database_url = 'sqlite:///mwearicepro.db'
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

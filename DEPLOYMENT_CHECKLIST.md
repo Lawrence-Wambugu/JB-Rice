@@ -19,7 +19,7 @@
 - [ ] Configure settings:
   - [ ] Name: `jb-rice-pro-backend`
   - [ ] Environment: `Python 3.10`
-  - [ ] Build Command: `pip install -r requirements.txt`
+      - [ ] Build Command: `pip install -r requirements_simple.txt`
   - [ ] Start Command: `gunicorn app:app`
   - [ ] Region: Choose closest location
 
