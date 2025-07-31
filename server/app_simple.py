@@ -255,6 +255,12 @@ def reset_password():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+# Health check route
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({'status': 'healthy', 'message': 'JB-Rice-Pro API is running'}), 200
+
 # Routes
 @app.route('/api/inventory', methods=['GET'])
 def get_inventory():
@@ -657,6 +663,16 @@ def get_sales_report():
             'restaurant_revenue': sum(o.total_amount for o in restaurant_orders),
             'individual_revenue': sum(o.total_amount for o in individual_orders)
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/init-db', methods=['POST'])
+def init_database():
+    """Initialize database tables"""
+    try:
+        with app.app_context():
+            db.create_all()
+        return jsonify({'message': 'Database initialized successfully'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
