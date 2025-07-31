@@ -15,7 +15,10 @@ export const authService = {
   signup: (userData) => authAPI.post('/auth/signup', userData),
   
   // Sign in
-  signin: (credentials) => authAPI.post('/auth/signin', credentials),
+  signin: (credentials) => authAPI.post('/auth/signin', {
+    username_or_email: credentials.username,
+    password: credentials.password
+  }),
   
   // Forgot password
   forgotPassword: (email) => authAPI.post('/auth/forgot-password', { email }),
