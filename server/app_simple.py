@@ -677,8 +677,17 @@ def init_database():
     """Initialize database tables"""
     try:
         with app.app_context():
+            # Drop all tables first to ensure clean slate
+            db.drop_all()
+            # Create all tables
             db.create_all()
-        return jsonify({'message': 'Database initialized successfully'}), 200
+            # Get list of created tables
+            inspector = db.inspect(db.engine)
+            tables = inspector.get_table_names()
+        return jsonify({
+            'message': 'Database initialized successfully',
+            'tables_created': tables
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
