@@ -123,6 +123,39 @@ def set_current_user_id(user_id):
     """This is handled by the frontend now"""
     pass
 
+def calculate_inventory(user_id):
+    """Calculate current inventory status for a specific user"""
+    try:
+        if not user_id:
+            return {'error': 'User not authenticated'}
+        
+        # Calculate current stock for this user
+        total_bags_added = db.session.query(db.func.sum(Inventory.bags_added)).filter(
+            Inventory.user_id == user_id
+        ).scalar() or 0
+        total_kg_added = db.session.query(db.func.sum(Inventory.total_kg)).filter(
+            Inventory.user_id == user_id
+        ).scalar() or 0
+        
+        # Calculate sold kg for this user
+        total_sold_kg = db.session.query(db.func.sum(Order.quantity_kg)).filter(
+            Order.user_id == user_id,
+            Order.delivery_status == 'delivered'
+        ).scalar() or 0
+        
+        available_kg = total_kg_added - total_sold_kg
+        available_bags = available_kg / 60  # 60kg per bag
+        
+        return {
+            'available_kg': round(available_kg, 2),
+            'available_bags': round(available_bags, 2),
+            'total_bags_added': total_bags_added,
+            'total_kg_added': total_kg_added,
+            'total_sold_kg': total_sold_kg
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
 # Authentication routes
 @app.route('/api/auth/signup', methods=['POST'])
 def signup():
@@ -338,30 +371,10 @@ def get_inventory():
         if not user_id:
             return jsonify({'error': 'User not authenticated'}), 401
         
-        # Calculate current stock for this user
-        total_bags_added = db.session.query(db.func.sum(Inventory.bags_added)).filter(
-            Inventory.user_id == user_id
-        ).scalar() or 0
-        total_kg_added = db.session.query(db.func.sum(Inventory.total_kg)).filter(
-            Inventory.user_id == user_id
-        ).scalar() or 0
-        
-        # Calculate sold kg for this user
-        total_sold_kg = db.session.query(db.func.sum(Order.quantity_kg)).filter(
-            Order.user_id == user_id,
-            Order.delivery_status == 'delivered'
-        ).scalar() or 0
-        
-        available_kg = total_kg_added - total_sold_kg
-        available_bags = available_kg / 60  # 60kg per bag
-        
-        return jsonify({
-            'available_kg': round(available_kg, 2),
-            'available_bags': round(available_bags, 2),
-            'total_bags_added': total_bags_added,
-            'total_kg_added': total_kg_added,
-            'total_sold_kg': total_sold_kg
-        })
+        inventory_data = calculate_inventory(user_id)
+        if 'error' in inventory_data:
+            return jsonify({'error': inventory_data['error']}), 500
+        return jsonify(inventory_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -615,6 +628,10 @@ def get_orders():
 def create_order():
     """Create new order"""
     try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
         data = request.get_json()
         customer_id = data.get('customer_id')
         quantity_kg = data.get('quantity_kg', 0)
@@ -627,11 +644,14 @@ def create_order():
         total_amount = quantity_kg * price_per_kg
         
         # Check inventory
-        inventory = get_inventory().get_json()
+        inventory = calculate_inventory(user_id)
+        if 'error' in inventory:
+            return jsonify({'error': inventory['error']}), 500
         if inventory['available_kg'] < quantity_kg:
             return jsonify({'error': 'Insufficient inventory'}), 400
         
         new_order = Order(
+            user_id=user_id,
             customer_id=customer_id,
             quantity_kg=quantity_kg,
             price_per_kg=price_per_kg,
@@ -690,7 +710,13 @@ def update_order(order_id):
         total_amount = quantity_kg * price_per_kg
 
         # Check inventory
-        inventory = get_inventory().get_json()
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        inventory = calculate_inventory(user_id)
+        if 'error' in inventory:
+            return jsonify({'error': inventory['error']}), 500
         if inventory['available_kg'] < quantity_kg:
             return jsonify({'error': 'Insufficient inventory'}), 400
 
