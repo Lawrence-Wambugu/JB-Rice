@@ -92,7 +92,7 @@ const Dashboard = () => {
       changeType: 'positive'
     },
     {
-      title: 'Monthly Revenue',
+      title: 'Monthly Revenue (Paid)',
       value: `KES ${(stats.sales.total_revenue || 0).toLocaleString()}`,
       icon: DollarSign,
       color: 'bg-yellow-500',
@@ -118,7 +118,10 @@ const Dashboard = () => {
     labels: ['Restaurants', 'Individuals'],
     datasets: [
       {
-        data: [65, 35],
+        data: [
+          stats.sales.restaurant_revenue || 0,
+          stats.sales.individual_revenue || 0
+        ],
         backgroundColor: ['#16a34a', '#f59e0b'],
         borderWidth: 0,
       },
@@ -173,6 +176,36 @@ const Dashboard = () => {
           </div>
         ))}
       </div>
+
+      {/* Payment Statistics */}
+      {stats.sales.total_orders_amount && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Overview</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <p className="text-sm font-medium text-green-600">Total Orders Amount</p>
+              <p className="text-2xl font-bold text-green-700">
+                KES {(stats.sales.total_orders_amount || 0).toLocaleString()}
+              </p>
+              <p className="text-xs text-green-500 mt-1">All delivered orders</p>
+            </div>
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm font-medium text-blue-600">Amount Paid</p>
+              <p className="text-2xl font-bold text-blue-700">
+                KES {(stats.sales.total_revenue || 0).toLocaleString()}
+              </p>
+              <p className="text-xs text-blue-500 mt-1">Actual payments received</p>
+            </div>
+            <div className="text-center p-4 bg-orange-50 rounded-lg">
+              <p className="text-sm font-medium text-orange-600">Pending Payments</p>
+              <p className="text-2xl font-bold text-orange-700">
+                KES {(stats.sales.total_pending_payments || 0).toLocaleString()}
+              </p>
+              <p className="text-xs text-orange-500 mt-1">Outstanding amounts</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

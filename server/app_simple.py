@@ -921,7 +921,8 @@ def get_sales_report():
             Order.delivery_status == 'delivered'
         ).all()
         
-        total_revenue = sum(order.total_amount for order in orders)
+        # Calculate revenue based on actual payments received
+        total_revenue = sum(order.amount_paid for order in orders)
         total_kg_sold = sum(order.quantity_kg for order in orders)
         
         # Calculate cost of goods sold
@@ -929,23 +930,32 @@ def get_sales_report():
         total_cost = total_kg_sold * cost_per_kg
         profit = total_revenue - total_cost
         
-        # Customer breakdown
+        # Customer breakdown based on actual payments
         restaurant_orders = [o for o in orders if o.customer.customer_type == 'restaurant']
         individual_orders = [o for o in orders if o.customer.customer_type == 'individual']
+        
+        restaurant_revenue = sum(o.amount_paid for o in restaurant_orders)
+        individual_revenue = sum(o.amount_paid for o in individual_orders)
+        
+        # Additional payment statistics
+        total_orders_amount = sum(order.total_amount for order in orders)
+        total_pending_payments = total_orders_amount - total_revenue
         
         return jsonify({
             'period': period,
             'start_date': start_date.isoformat(),
             'end_date': end_date.isoformat(),
             'total_orders': len(orders),
-            'total_revenue': total_revenue,
+            'total_revenue': total_revenue,  # Actual payments received
+            'total_orders_amount': total_orders_amount,  # Total order amounts
+            'total_pending_payments': total_pending_payments,  # Outstanding payments
             'total_kg_sold': total_kg_sold,
             'total_cost': total_cost,
             'profit': profit,
             'restaurant_orders': len(restaurant_orders),
             'individual_orders': len(individual_orders),
-            'restaurant_revenue': sum(o.total_amount for o in restaurant_orders),
-            'individual_revenue': sum(o.total_amount for o in individual_orders)
+            'restaurant_revenue': restaurant_revenue,
+            'individual_revenue': individual_revenue
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -982,7 +992,7 @@ def get_inventory_report():
         # Calculate sold inventory
         delivered_orders = Order.query.filter_by(delivery_status='delivered').all()
         sold_kg = sum(order.quantity_kg for order in delivered_orders)
-        sold_revenue = sum(order.total_amount for order in delivered_orders)
+        sold_revenue = sum(order.amount_paid for order in delivered_orders)  # Actual payments received
         
         available_kg = total_kg - sold_kg
         cost_of_sold = sold_kg * 150  # KES 150 per kg
