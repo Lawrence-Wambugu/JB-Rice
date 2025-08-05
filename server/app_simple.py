@@ -80,8 +80,22 @@ class Order(db.Model):
     order_date = db.Column(db.DateTime, default=get_eat_time)
     delivery_status = db.Column(db.String(20), default='pending')  # pending, delivered, cancelled
     delivery_date = db.Column(db.DateTime)
+    payment_status = db.Column(db.String(20), default='unpaid')  # unpaid, partial, paid
+    amount_paid = db.Column(db.Float, default=0.0)
+    amount_remaining = db.Column(db.Float, default=0.0)
     user = db.relationship('User', backref='orders')
     customer = db.relationship('Customer', backref='orders')
+    payments = db.relationship('Payment', backref='order', cascade='all, delete-orphan')
+
+class Payment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    payment_date = db.Column(db.DateTime, default=get_eat_time)
+    payment_method = db.Column(db.String(50), default='cash')  # cash, mpesa, bank, etc.
+    notes = db.Column(db.Text)
+    user = db.relationship('User', backref='payments')
 
 # Password validation function
 def validate_password(password):
@@ -619,7 +633,10 @@ def get_orders():
             'total_amount': o.total_amount,
             'order_date': o.order_date.isoformat(),
             'delivery_status': o.delivery_status,
-            'delivery_date': o.delivery_date.isoformat() if o.delivery_date else None
+            'delivery_date': o.delivery_date.isoformat() if o.delivery_date else None,
+            'payment_status': o.payment_status,
+            'amount_paid': o.amount_paid,
+            'amount_remaining': o.amount_remaining
         } for o in orders])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -655,7 +672,8 @@ def create_order():
             customer_id=customer_id,
             quantity_kg=quantity_kg,
             price_per_kg=price_per_kg,
-            total_amount=total_amount
+            total_amount=total_amount,
+            amount_remaining=total_amount  # Initially, amount remaining equals total amount
         )
         
         db.session.add(new_order)
@@ -682,7 +700,18 @@ def update_order_status(order_id):
             order.delivery_date = get_eat_time()
         
         db.session.commit()
-        return jsonify({'message': 'Order status updated successfully'})
+        return jsonify({
+            'message': 'Order status updated successfully',
+            'order': {
+                'id': order.id,
+                'delivery_status': order.delivery_status,
+                'delivery_date': order.delivery_date.isoformat() if order.delivery_date else None,
+                'payment_status': order.payment_status,
+                'amount_paid': order.amount_paid,
+                'amount_remaining': order.amount_remaining,
+                'total_amount': order.total_amount
+            }
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -738,6 +767,134 @@ def update_order(order_id):
                 'total_amount': order.total_amount,
                 'order_date': order.order_date.isoformat(),
                 'delivery_status': order.delivery_status
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# Payment endpoints
+@app.route('/api/orders/<int:order_id>/payments', methods=['GET'])
+def get_order_payments(order_id):
+    """Get all payments for a specific order"""
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        order = Order.query.filter_by(id=order_id, user_id=user_id).first()
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
+        
+        payments = Payment.query.filter_by(order_id=order_id, user_id=user_id).order_by(Payment.payment_date.desc()).all()
+        
+        return jsonify([{
+            'id': payment.id,
+            'amount': payment.amount,
+            'payment_date': payment.payment_date.isoformat(),
+            'payment_method': payment.payment_method,
+            'notes': payment.notes,
+            'formatted_date': payment.payment_date.strftime('%B %d, %Y at %I:%M %p')
+        } for payment in payments])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/orders/<int:order_id>/payments', methods=['POST'])
+def add_payment(order_id):
+    """Add a payment to an order"""
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        order = Order.query.filter_by(id=order_id, user_id=user_id).first()
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
+        
+        data = request.get_json()
+        amount = data.get('amount', 0)
+        payment_method = data.get('payment_method', 'cash')
+        notes = data.get('notes', '')
+        
+        if amount <= 0:
+            return jsonify({'error': 'Payment amount must be positive'}), 400
+        
+        if amount > order.amount_remaining:
+            return jsonify({'error': 'Payment amount cannot exceed remaining balance'}), 400
+        
+        # Create payment record
+        payment = Payment(
+            order_id=order_id,
+            user_id=user_id,
+            amount=amount,
+            payment_method=payment_method,
+            notes=notes
+        )
+        
+        # Update order payment status
+        order.amount_paid += amount
+        order.amount_remaining -= amount
+        
+        if order.amount_remaining == 0:
+            order.payment_status = 'paid'
+        else:
+            order.payment_status = 'partial'
+        
+        db.session.add(payment)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Payment added successfully',
+            'payment': {
+                'id': payment.id,
+                'amount': payment.amount,
+                'payment_method': payment.payment_method,
+                'payment_date': payment.payment_date.isoformat()
+            },
+            'order_status': {
+                'amount_paid': order.amount_paid,
+                'amount_remaining': order.amount_remaining,
+                'payment_status': order.payment_status
+            }
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/orders/<int:order_id>/payments/<int:payment_id>', methods=['DELETE'])
+def delete_payment(order_id, payment_id):
+    """Delete a payment from an order"""
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        order = Order.query.filter_by(id=order_id, user_id=user_id).first()
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
+        
+        payment = Payment.query.filter_by(id=payment_id, order_id=order_id, user_id=user_id).first()
+        if not payment:
+            return jsonify({'error': 'Payment not found'}), 404
+        
+        # Update order payment status
+        order.amount_paid -= payment.amount
+        order.amount_remaining += payment.amount
+        
+        if order.amount_paid == 0:
+            order.payment_status = 'unpaid'
+        else:
+            order.payment_status = 'partial'
+        
+        db.session.delete(payment)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Payment deleted successfully',
+            'order_status': {
+                'amount_paid': order.amount_paid,
+                'amount_remaining': order.amount_remaining,
+                'payment_status': order.payment_status
             }
         })
     except Exception as e:

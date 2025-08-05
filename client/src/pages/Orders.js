@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShoppingCart, Plus, CheckCircle, XCircle, Clock, Filter, Calendar, Edit2 } from 'lucide-react';
-import { ordersAPI, customersAPI } from '../services/api';
+import { ShoppingCart, Plus, CheckCircle, XCircle, Clock, Filter, Calendar, Edit2, DollarSign, CreditCard, Trash2 } from 'lucide-react';
+import { ordersAPI, customersAPI, paymentsAPI } from '../services/api';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
@@ -18,6 +18,15 @@ const Orders = () => {
   const [editFormData, setEditFormData] = useState({
     customer_id: '',
     quantity_kg: ''
+  });
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showPaymentsModal, setShowPaymentsModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [payments, setPayments] = useState([]);
+  const [paymentFormData, setPaymentFormData] = useState({
+    amount: '',
+    payment_method: 'cash',
+    notes: ''
   });
 
   const fetchData = useCallback(async () => {
@@ -96,6 +105,58 @@ const Orders = () => {
       fetchData();
     } catch (error) {
       console.error('Error updating order status:', error);
+    }
+  };
+
+  const handleShowPayments = async (order) => {
+    try {
+      setSelectedOrder(order);
+      const response = await paymentsAPI.getOrderPayments(order.id);
+      setPayments(response.data);
+      setShowPaymentsModal(true);
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+    }
+  };
+
+  const handleAddPayment = (order) => {
+    setSelectedOrder(order);
+    setPaymentFormData({
+      amount: '',
+      payment_method: 'cash',
+      notes: ''
+    });
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await paymentsAPI.addPayment(selectedOrder.id, {
+        amount: parseFloat(paymentFormData.amount),
+        payment_method: paymentFormData.payment_method,
+        notes: paymentFormData.notes
+      });
+      setShowPaymentModal(false);
+      setPaymentFormData({ amount: '', payment_method: 'cash', notes: '' });
+      fetchData(); // Refresh orders to update payment status
+    } catch (error) {
+      console.error('Error adding payment:', error);
+      alert('Error adding payment. Please check the amount.');
+    }
+  };
+
+  const handleDeletePayment = async (paymentId) => {
+    if (window.confirm('Are you sure you want to delete this payment?')) {
+      try {
+        await paymentsAPI.deletePayment(selectedOrder.id, paymentId);
+        // Refresh payments list
+        const response = await paymentsAPI.getOrderPayments(selectedOrder.id);
+        setPayments(response.data);
+        fetchData(); // Refresh orders to update payment status
+      } catch (error) {
+        console.error('Error deleting payment:', error);
+      }
     }
   };
 
@@ -227,7 +288,7 @@ const Orders = () => {
                       </span>
                     </div>
                     <p className="text-gray-600 mt-1">Customer: {order.customer_name}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-3">
                       <div>
                         <p className="text-sm text-gray-500">Quantity</p>
                         <p className="font-medium">{order.quantity_kg} kg</p>
@@ -240,6 +301,23 @@ const Orders = () => {
                         <p className="text-sm text-gray-500">Total Amount</p>
                         <p className="font-medium">KES {order.total_amount.toLocaleString()}</p>
                       </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Payment Status</p>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                            order.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {order.payment_status}
+                          </span>
+                          {order.payment_status !== 'paid' && (
+                            <span className="text-xs text-gray-500">
+                              (KES {order.amount_remaining.toLocaleString()} remaining)
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     <p className="text-sm text-gray-500 mt-2">
                       Ordered: {new Date(order.order_date).toLocaleDateString()}
@@ -247,30 +325,50 @@ const Orders = () => {
                   </div>
                   <div className="flex items-center space-x-2 ml-4">
                     {getStatusIcon(order.delivery_status)}
-                    {order.delivery_status === 'pending' && (
-                      <div className="flex space-x-2">
+                    <div className="flex space-x-2">
+                      {order.delivery_status === 'pending' && (
+                        <>
+                          <button
+                            onClick={() => handleEdit(order)}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                            title="Edit order details"
+                          >
+                            <Edit2 className="h-4 w-4 inline mr-1" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'delivered')}
+                            className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                          >
+                            Mark Delivered
+                          </button>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'cancelled')}
+                            className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                      {order.delivery_status === 'delivered' && order.payment_status !== 'paid' && (
                         <button
-                          onClick={() => handleEdit(order)}
-                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                          title="Edit order details"
-                        >
-                          <Edit2 className="h-4 w-4 inline mr-1" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleStatusUpdate(order.id, 'delivered')}
+                          onClick={() => handleAddPayment(order)}
                           className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                          title="Add payment"
                         >
-                          Mark Delivered
+                          <DollarSign className="h-4 w-4 inline mr-1" />
+                          Add Payment
                         </button>
-                        <button
-                          onClick={() => handleStatusUpdate(order.id, 'cancelled')}
-                          className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
+                      )}
+                      <button
+                        onClick={() => handleShowPayments(order)}
+                        className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                        title="View payments"
+                      >
+                        <CreditCard className="h-4 w-4 inline mr-1" />
+                        Payments
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -415,6 +513,179 @@ const Orders = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Payment Modal */}
+      {showPaymentModal && selectedOrder && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Add Payment</h3>
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  <strong>Order:</strong> #{selectedOrder.id} - {selectedOrder.customer_name}
+                </p>
+                <p className="text-sm text-blue-700">
+                  <strong>Remaining:</strong> KES {selectedOrder.amount_remaining.toLocaleString()}
+                </p>
+              </div>
+              <form onSubmit={handlePaymentSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Amount (KES)
+                  </label>
+                  <input
+                    type="number"
+                    value={paymentFormData.amount}
+                    onChange={(e) => setPaymentFormData({ ...paymentFormData, amount: e.target.value })}
+                    className="input-field"
+                    placeholder="Enter payment amount"
+                    min="0.01"
+                    step="0.01"
+                    max={selectedOrder.amount_remaining}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum: KES {selectedOrder.amount_remaining.toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Method
+                  </label>
+                  <select
+                    value={paymentFormData.payment_method}
+                    onChange={(e) => setPaymentFormData({ ...paymentFormData, payment_method: e.target.value })}
+                    className="input-field"
+                    required
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="mpesa">M-Pesa</option>
+                    <option value="bank">Bank Transfer</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    value={paymentFormData.notes}
+                    onChange={(e) => setPaymentFormData({ ...paymentFormData, notes: e.target.value })}
+                    className="input-field"
+                    placeholder="Add any notes about this payment"
+                    rows="3"
+                  />
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    type="submit"
+                    className="btn-primary flex-1"
+                  >
+                    Add Payment
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentModal(false)}
+                    className="btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Payments Modal */}
+      {showPaymentsModal && selectedOrder && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Payment History</h3>
+                <button
+                  onClick={() => setShowPaymentsModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  <strong>Order:</strong> #{selectedOrder.id} - {selectedOrder.customer_name}
+                </p>
+                <p className="text-sm text-blue-700">
+                  <strong>Total Amount:</strong> KES {selectedOrder.total_amount.toLocaleString()}
+                </p>
+                <p className="text-sm text-blue-700">
+                  <strong>Amount Paid:</strong> KES {selectedOrder.amount_paid.toLocaleString()}
+                </p>
+                <p className="text-sm text-blue-700">
+                  <strong>Amount Remaining:</strong> KES {selectedOrder.amount_remaining.toLocaleString()}
+                </p>
+              </div>
+              
+              {payments.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <CreditCard className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No payments recorded for this order.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {payments.map((payment) => (
+                    <div key={payment.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3">
+                            <h4 className="text-lg font-semibold text-gray-900">
+                              KES {payment.amount.toLocaleString()}
+                            </h4>
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              {payment.payment_method}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 mt-1">
+                            {payment.formatted_date}
+                          </p>
+                          {payment.notes && (
+                            <p className="text-sm text-gray-500 mt-1">
+                              {payment.notes}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleDeletePayment(payment.id)}
+                          className="px-2 py-1 text-red-600 hover:text-red-800"
+                          title="Delete payment"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {selectedOrder.payment_status !== 'paid' && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => {
+                      setShowPaymentsModal(false);
+                      handleAddPayment(selectedOrder);
+                    }}
+                    className="btn-primary w-full"
+                  >
+                    <DollarSign className="h-4 w-4 inline mr-2" />
+                    Add Another Payment
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

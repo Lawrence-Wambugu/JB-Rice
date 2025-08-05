@@ -256,9 +256,8 @@ def reset_password():
         return jsonify({'error': str(e)}), 500
 
 # Routes
-@app.route('/api/inventory', methods=['GET'])
-def get_inventory():
-    """Get current inventory status"""
+def calculate_inventory():
+    """Calculate current inventory status"""
     try:
         # Calculate current stock
         total_bags_added = db.session.query(db.func.sum(Inventory.bags_added)).scalar() or 0
@@ -272,13 +271,24 @@ def get_inventory():
         available_kg = total_kg_added - total_sold_kg
         available_bags = available_kg / 60  # 60kg per bag
         
-        return jsonify({
+        return {
             'available_kg': round(available_kg, 2),
             'available_bags': round(available_bags, 2),
             'total_bags_added': total_bags_added,
             'total_kg_added': total_kg_added,
             'total_sold_kg': total_sold_kg
-        })
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
+@app.route('/api/inventory', methods=['GET'])
+def get_inventory():
+    """Get current inventory status"""
+    try:
+        inventory_data = calculate_inventory()
+        if 'error' in inventory_data:
+            return jsonify({'error': inventory_data['error']}), 500
+        return jsonify(inventory_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -501,7 +511,9 @@ def create_order():
         total_amount = quantity_kg * price_per_kg
         
         # Check inventory
-        inventory = get_inventory().get_json()
+        inventory = calculate_inventory()
+        if 'error' in inventory:
+            return jsonify({'error': inventory['error']}), 500
         if inventory['available_kg'] < quantity_kg:
             return jsonify({'error': 'Insufficient inventory'}), 400
         
@@ -564,7 +576,9 @@ def update_order(order_id):
         total_amount = quantity_kg * price_per_kg
         
         # Check inventory
-        inventory = get_inventory().get_json()
+        inventory = calculate_inventory()
+        if 'error' in inventory:
+            return jsonify({'error': inventory['error']}), 500
         if inventory['available_kg'] < quantity_kg:
             return jsonify({'error': 'Insufficient inventory'}), 400
         

@@ -49,6 +49,13 @@ export const ordersAPI = {
   updateOrderStatus: (orderId, status) => api.put(`/orders/${orderId}/status`, { status })
 };
 
+// Payments API
+export const paymentsAPI = {
+  getOrderPayments: (orderId) => api.get(`/orders/${orderId}/payments`),
+  addPayment: (orderId, data) => api.post(`/orders/${orderId}/payments`, data),
+  deletePayment: (orderId, paymentId) => api.delete(`/orders/${orderId}/payments/${paymentId}`)
+};
+
 // Reports API
 export const reportsAPI = {
   getSalesReport: (period) => api.get('/reports/sales', { params: { period } }),
