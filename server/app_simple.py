@@ -568,7 +568,14 @@ def add_customer():
 def update_customer(customer_id):
     """Update customer"""
     try:
-        customer = Customer.query.get_or_404(customer_id)
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        customer = Customer.query.filter_by(id=customer_id, user_id=user_id).first()
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+        
         data = request.get_json()
         
         customer.name = data.get('name', customer.name)
@@ -588,7 +595,14 @@ def update_customer(customer_id):
 def delete_customer(customer_id):
     """Delete customer"""
     try:
-        customer = Customer.query.get_or_404(customer_id)
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        customer = Customer.query.filter_by(id=customer_id, user_id=user_id).first()
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+        
         db.session.delete(customer)
         db.session.commit()
         
@@ -601,12 +615,16 @@ def delete_customer(customer_id):
 def get_orders():
     """Get all orders with optional filtering"""
     try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
         status = request.args.get('status')
         customer_id = request.args.get('customer_id')
         period = request.args.get('period', 'all')  # week, month, all
         end_date = get_eat_time()
         
-        query = Order.query
+        query = Order.query.filter(Order.user_id == user_id)
         
         # Apply period filter
         if period == 'week':
@@ -688,7 +706,14 @@ def create_order():
 def update_order_status(order_id):
     """Update order delivery status"""
     try:
-        order = Order.query.get_or_404(order_id)
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        order = Order.query.filter_by(id=order_id, user_id=user_id).first()
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
+        
         data = request.get_json()
         new_status = data.get('status')
         
@@ -720,7 +745,13 @@ def update_order_status(order_id):
 def update_order(order_id):
     """Update order details (only for pending orders)"""
     try:
-        order = Order.query.get_or_404(order_id)
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        order = Order.query.filter_by(id=order_id, user_id=user_id).first()
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
 
         # Only allow editing pending orders
         if order.delivery_status != 'pending':
@@ -905,6 +936,10 @@ def delete_payment(order_id, payment_id):
 def get_sales_report():
     """Get sales report for specified period"""
     try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
         period = request.args.get('period', 'month')  # day, week, month
         end_date = get_eat_time()
         
@@ -916,6 +951,7 @@ def get_sales_report():
             start_date = end_date - timedelta(days=30)
         
         orders = Order.query.filter(
+            Order.user_id == user_id,
             Order.order_date >= start_date,
             Order.order_date <= end_date,
             Order.delivery_status == 'delivered'
@@ -983,14 +1019,21 @@ def init_database():
 def get_inventory_report():
     """Get detailed inventory report"""
     try:
-        inventory_records = Inventory.query.order_by(Inventory.date_added.desc()).all()
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        inventory_records = Inventory.query.filter(Inventory.user_id == user_id).order_by(Inventory.date_added.desc()).all()
         
         total_bags = sum(record.bags_added for record in inventory_records)
         total_kg = sum(record.total_kg for record in inventory_records)
         total_cost = sum(record.bags_added * record.cost_per_bag for record in inventory_records)
         
         # Calculate sold inventory
-        delivered_orders = Order.query.filter_by(delivery_status='delivered').all()
+        delivered_orders = Order.query.filter(
+            Order.user_id == user_id,
+            Order.delivery_status == 'delivered'
+        ).all()
         sold_kg = sum(order.quantity_kg for order in delivered_orders)
         sold_revenue = sum(order.amount_paid for order in delivered_orders)  # Actual payments received
         
