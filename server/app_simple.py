@@ -467,7 +467,14 @@ def add_inventory():
 def update_inventory(inventory_id):
     """Update inventory record"""
     try:
-        inventory = Inventory.query.get_or_404(inventory_id)
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        inventory = Inventory.query.filter_by(id=inventory_id, user_id=user_id).first()
+        if not inventory:
+            return jsonify({'error': 'Inventory record not found'}), 404
+        
         data = request.get_json()
         
         bags = data.get('bags', inventory.bags_added)
